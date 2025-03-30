@@ -65,8 +65,9 @@ jobs:
     - name: Connect to Azure Subscription
       uses: azure/login@v2.1.1
       with:
-        creds:              ${{ env.AZURE_D_SP_CREDS }}
-        #environment:        ${{ env.AZURE_GOV_ENV }}
+        client-id: ${{ secrets.AZURE_D_SP_CLIENT_ID }}
+        client-secret: ${{ secrets.AZURE_D_SP_CLIENT_SECRET }}
+        tenant-id: ${{ secrets.AZURE_D_SP_TENANT_ID }}
         enable-AzPSSession: true
 
     - name: Prepare Azure Tags
