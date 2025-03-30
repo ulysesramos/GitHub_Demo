@@ -42,13 +42,13 @@ jobs:
         fetch-depth: 0
 
     - name: Setup GitVersion
-      uses: GitTools/actions//gitversion/gitversionsetup@v0.10.2
+      uses: GitTools/actions/gitversion/setup@v0.10.2
       with:
           versionSpec: '5.x'
 
     - name: Execute GitVersion
       id:   gitversion
-      uses: GitTools/actions/execute@v0.10.2
+      uses: GitTools/actions/gitversion/execute@v0.10.2
 
     outputs:
       SEM_VERSION: ${{ steps.gitversion.outputs.EscapedBranchName }}
