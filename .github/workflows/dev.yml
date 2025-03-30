@@ -48,7 +48,7 @@ jobs:
 
     - name: Execute GitVersion
       id:   gitversion
-      uses: ArmyEITaaS/actions/gitversion/execute@v0.10.2
+      uses: execute@v0.10.2
 
     outputs:
       SEM_VERSION: ${{ steps.gitversion.outputs.EscapedBranchName }}
