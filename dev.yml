@@ -1,0 +1,113 @@
+name: dev
+
+env:
+  ARM_CLIENT_ID:         ${{ secrets.AZURE_D_SP_CLIENT_ID }}
+  ARM_CLIENT_SECRET:     ${{ secrets.AZURE_D_SP_CLIENT_SECRET }}
+  #ARM_ENVIRONMENT:       usgovernment
+  #ARM_PARTNER_ID:        ${{ secrets.AZURE_CUA_ID }}
+  ARM_SUBSCRIPTION_ID:   ${{ secrets.AZURE_D_SP_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID:         ${{ secrets.AZURE_D_SP_TENANT_ID }}
+  AZURE_E_CAS_SP_CREDS:  ${{ secrets.AZURE_S_EITAAS_CAS_SP }}
+  #AZURE_GOV_ENV:         AzureUSGovernment
+  LOCATION:              eastus2
+
+  TEST_CONNECTIONS: '{
+    AllowBastionSSHInBound: {
+      direction:         "Inbound",
+      local_port:        22,
+      protocol:          "TCP",
+      remote_ip_address: ["10.10.10.10"],
+      remote_port:       "*"
+    }
+  }'
+
+  TF_VAR_admin_username_secret_name:       lh
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+    - 'README.md'
+    - 'LICENSE'
+    - '.github/ISSUE_TEMPLATE/**'
+
+jobs:
+  gitversion:
+    name:    Return GitVersion
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4.1.7
+      with:
+        fetch-depth: 0
+
+    - name: Setup GitVersion
+      uses: Demo/actions/gitversion/setup@v0.10.2
+      with:
+          versionSpec: '5.x'
+
+    - name: Execute GitVersion
+      id:   gitversion
+      uses: ArmyEITaaS/actions/gitversion/execute@v0.10.2
+
+    outputs:
+      SEM_VERSION: ${{ steps.gitversion.outputs.EscapedBranchName }}
+
+  terraform:
+    name:    Terraform
+    needs:   [gitversion]
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Branch
+      uses: actions/checkout@v4.1.7
+
+    - name: Connect to Azure Subscription
+      uses: azure/login@v2.1.1
+      with:
+        creds:              ${{ env.AZURE_D_SP_CREDS }}
+        #environment:        ${{ env.AZURE_GOV_ENV }}
+        enable-AzPSSession: true
+
+    - name: Prepare Azure Tags
+      uses: Azure/powershell@v2
+      with:
+        azPSVersion:         "latest"
+        failOnStandardError: "true"
+        inlineScript: | # Any module beginning with 'Az.' doesn't need to be manually installed when using this 'azure/powershell' GitHub Action.
+          # Due to the single quotes around this value, no PowerShell variables can be used in this string
+          $azureTags = '{
+            image_version     = "${{ needs.gitversion.outputs.SEM_VERSION }}",
+            source_offer      = "blah"
+          }'
+
+          # Using Out-File to output in utf8 encoding; `>>` operator defaults to UTF-8-BOM encoding and the var is not added to GITHUB_ENV
+          echo "AZURE_TAGS<<EOF" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $azureTags             | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "EOF"             | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+    - name: Install Terraform
+      uses: hashicorp/setup-terraform@v3.1.1
+
+    - name: Terraform Init
+      run:  terraform -chdir=terraform init -input=false -upgrade -backend-config=${{ github.workspace }}/.tfbackend/${{ github.workflow }}
+
+    # Destroy test VM prior to Terraform plan & apply so that Terraform will rebuild VM after Packer image build.
+    - name: Terraform Destroy Test VM
+      if:   env.DELETE_VM == 'true'
+      run:  terraform -chdir=terraform destroy -input=false -auto-approve -target azurerm_linux_virtual_machine.vm
+      env:
+        TF_VAR_azure_tags:    ${{ env.AZURE_TAGS }}
+        TF_VAR_image_version: ${{ needs.gitversion.outputs.SEM_VERSION }}
+
+    - name: Terraform Plan
+      run:  terraform -chdir=terraform plan -input=false -out=tfplan
+      env:
+        TF_VAR_azure_tags:    ${{ env.AZURE_TAGS }}
+        TF_VAR_image_version: ${{ needs.gitversion.outputs.SEM_VERSION }}
+
+    - name: Terraform Apply
+      run:  terraform -chdir=terraform apply -auto-approve tfplan
+      env:
+        TF_VAR_azure_tags:    ${{ env.AZURE_TAGS }}
+        TF_VAR_image_version: ${{ needs.gitversion.outputs.SEM_VERSION }}
