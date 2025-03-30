@@ -63,11 +63,10 @@ jobs:
       uses: actions/checkout@v4.1.7
 
     - name: Connect to Azure Subscription
-      uses: azure/login@v2.1.1
+      uses: Azure/login@v1
       with:
-        client-id: ${{ secrets.AZURE_D_SP_CLIENT_ID }}
-        client-secret: ${{ secrets.AZURE_D_SP_CLIENT_SECRET }}
-        tenant-id: ${{ secrets.AZURE_D_SP_TENANT_ID }}
+        creds:              ${{ env.AZURE_D_SP_CREDS }}
+        #environment:        ${{ env.AZURE_GOV_ENV }}
         enable-AzPSSession: true
 
     - name: Prepare Azure Tags
